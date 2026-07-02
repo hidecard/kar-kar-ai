@@ -34,22 +34,6 @@ async function initDb() {
           response TEXT
         );
       `);
-
-      // Initial JavaScript/Programming Data
-      const initialData = [
-        ['javascript', 'JavaScript သည် Web Development အတွက် အဓိကသုံးသော Programming Language တစ်ခုဖြစ်ပါသည်။'],
-        ['variable', 'JavaScript တွင် variable ကြေညာရန် let, const နှင့် var တို့ကို အသုံးပြုနိုင်ပါသည်။'],
-        ['function', 'Function ဆိုသည်မှာ သတ်မှတ်ထားသော အလုပ်တစ်ခုကို လုပ်ဆောင်ရန် စုစည်းထားသော code blocks များဖြစ်ပါသည်။'],
-        ['react', 'React သည် UI တည်ဆောက်ရန်အတွက် အသုံးပြုသော JavaScript Library တစ်ခုဖြစ်ပါသည်။'],
-        ['nodejs', 'Node.js သည် JavaScript ကို server-side တွင် run နိုင်အောင် ပြုလုပ်ပေးသော runtime တစ်ခုဖြစ်ပါသည်။']
-      ];
-
-      for (const [keyword, response] of initialData) {
-        await db.execute({
-          sql: 'INSERT OR IGNORE INTO knowledge_base (keyword, response) VALUES (?, ?)',
-          args: [keyword, response]
-        });
-      }
     }
   } catch (error) {
     console.error('❌ DB Init Error:', error);
@@ -60,15 +44,16 @@ initDb();
 
 async function findInKnowledgeBase(text) {
   try {
-    // Convert input to lowercase and search
     const lowerText = text.toLowerCase();
-    const result = await db.execute({
-      sql: 'SELECT response FROM knowledge_base WHERE ? LIKE "%" || LOWER(keyword) || "%" LIMIT 1',
-      args: [lowerText]
-    });
+    // Fetch all keywords to check locally for better matching
+    const result = await db.execute('SELECT keyword, response FROM knowledge_base');
     
-    if (result.rows.length > 0) {
-      return result.rows[0].response;
+    for (const row of result.rows) {
+      const keyword = row.keyword.toLowerCase();
+      // If the message contains the keyword, return the response
+      if (lowerText.includes(keyword)) {
+        return row.response;
+      }
     }
     return null;
   } catch (error) {
@@ -110,16 +95,16 @@ bot.on('text', async (ctx) => {
   const userText = ctx.message.text;
 
   try {
-    await saveToMemory(userId, 'user', userText);
-
-    // 1. Check Knowledge Base first to save Gemini API Quota
+    // 1. Check Knowledge Base first
     const kbResponse = await findInKnowledgeBase(userText);
     if (kbResponse) {
+      await saveToMemory(userId, 'user', userText);
       await saveToMemory(userId, 'model', kbResponse);
       return ctx.reply(kbResponse + "\n\n(Retrieved from Local Knowledge Base)");
     }
 
-    // 2. If not found, use Gemini API
+    // 2. If not found in KB, try Gemini
+    await saveToMemory(userId, 'user', userText);
     const memoryRows = await getChatMemory(userId);
     const history = memoryRows.map(row => ({
       role: row.role === 'user' ? 'user' : 'model',
