@@ -91,15 +91,8 @@ bot.on('text', async (ctx) => {
     return ctx.reply(aiAnswer);
 
   } catch (error) {
-    console.error("🤖 Gemini/Bot Error:", error);
-    // Return detailed error message to help debug
-    let errorMsg = `Gemini AI Error: ${error.message}`;
-    if (error.message.includes('API_KEY_INVALID')) {
-        errorMsg = "အမှား: Gemini API Key မမှန်ကန်ပါ။ ကျေးဇူးပြု၍ API Key ကို ပြန်စစ်ပါ။";
-    } else if (error.message.includes('403')) {
-        errorMsg = "အမှား: Gemini API Access ငြင်းပယ်ခံရပါတယ်။ (403 Forbidden)";
-    }
-    return ctx.reply(`${errorMsg}\n\n(Debugging: Key length is ${GEMINI_KEY ? GEMINI_KEY.length : 0})`);
+    console.error("🤖 Bot Error:", error);
+    return ctx.reply(`Gemini Error: ${error.message}\n\n(Debugging: Key starts with ${GEMINI_KEY ? GEMINI_KEY.substring(0, 5) : 'NONE'})`);
   }
 });
 
