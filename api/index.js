@@ -60,11 +60,17 @@ initDb();
 
 async function findInKnowledgeBase(text) {
   try {
+    // Convert input to lowercase and search
+    const lowerText = text.toLowerCase();
     const result = await db.execute({
-      sql: 'SELECT response FROM knowledge_base WHERE ? LIKE "%" || keyword || "%" LIMIT 1',
-      args: [text.toLowerCase()]
+      sql: 'SELECT response FROM knowledge_base WHERE ? LIKE "%" || LOWER(keyword) || "%" LIMIT 1',
+      args: [lowerText]
     });
-    return result.rows.length > 0 ? result.rows[0].response : null;
+    
+    if (result.rows.length > 0) {
+      return result.rows[0].response;
+    }
+    return null;
   } catch (error) {
     console.error('❌ KB Search Error:', error);
     return null;
