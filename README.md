@@ -36,6 +36,14 @@ TURSO_AUTH_TOKEN=your_turso_auth_token
 ```
 
 ### 4. Running the Bot
+Local development အတွက်:
 ```bash
 node index.js
 ```
+*မှတ်ချက်: `index.js` သည် ယခုအခါ Webhook ပုံစံသို့ ပြောင်းလဲထားသဖြင့် local တွင် run ရန် `bot.launch()` ကို ပြန်ထည့်ရန် သို့မဟုတ် serverless-http ကဲ့သို့သော library များ သုံးရန် လိုအပ်နိုင်ပါသည်။*
+
+### 5. Vercel Deployment
+1. GitHub repository ကို Vercel နှင့် ချိတ်ဆက်ပါ။
+2. Vercel Project Settings ထဲတွင် Environment Variables (`TELEGRAM_BOT_TOKEN`, `GEMINI_API_KEY`, စသည်) ကို ထည့်သွင်းပါ။
+3. Deploy လုပ်ပြီးနောက် ရရှိလာသော Vercel URL ကို အသုံးပြု၍ Telegram Webhook ကို အောက်ပါအတိုင်း သတ်မှတ်ပါ:
+   `https://api.telegram.org/bot<YOUR_BOT_TOKEN>/setWebhook?url=<YOUR_VERCEL_URL>`
