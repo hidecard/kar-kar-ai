@@ -1,15 +1,18 @@
-require('dotenv').config();
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@libsql/client');
 const { GoogleGenAI } = require('@google/genai');
 
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+// Using explicit values to ensure they are available in Vercel environment
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const GEMINI_KEY = process.env.GEMINI_API_KEY;
+const TURSO_URL = process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.replace('llibsql://', 'libsql://') : '';
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
-const dbUrl = process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.replace('llibsql://', 'libsql://') : '';
+const bot = new Telegraf(BOT_TOKEN);
+const ai = new GoogleGenAI(GEMINI_KEY);
 const db = createClient({
-  url: dbUrl,
-  authToken: process.env.TURSO_AUTH_TOKEN,
+  url: TURSO_URL,
+  authToken: TURSO_TOKEN,
 });
 
 // Table initialization
@@ -57,14 +60,14 @@ async function getChatMemory(userId) {
 }
 
 bot.start((ctx) => {
-  console.log('Start command received');
+  console.log('Start command triggered');
   return ctx.reply('မင်္ဂလာပါဗျာ။ ကျွန်တော်က Turso Memory ပါဝင်တဲ့ Gemini AI Bot ဖြစ်ပါတယ်။ ကျွန်တော့်ကို စကားလုံးတွေ သင်ပေးပြီး စမ်းသပ်ကြည့်နိုင်ပါတယ်!');
 });
 
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id.toString();
   const userText = ctx.message.text;
-  console.log(`Message from ${userId}: ${userText}`);
+  console.log(`Received text from ${userId}: ${userText}`);
 
   try {
     await saveToMemory(userId, 'user', userText);
@@ -96,20 +99,19 @@ bot.on('text', async (ctx) => {
   }
 });
 
-// Vercel Serverless Function Handler
 module.exports = async (req, res) => {
+  console.log('Request Method:', req.method);
+  console.log('Request Body:', JSON.stringify(req.body));
+
   try {
     if (req.method === 'POST') {
-      if (!req.body || !req.body.update_id) {
-        return res.status(200).send('No update received');
-      }
       await bot.handleUpdate(req.body);
-      return res.status(200).json({ ok: true });
+      res.status(200).json({ ok: true });
     } else {
-      return res.status(200).send('Kar Kar AI Bot is running properly.');
+      res.status(200).send('Kar Kar AI Bot is active.');
     }
-  } catch (error) {
-    console.error('Global Handler Error:', error);
-    return res.status(200).json({ error: error.message });
+  } catch (err) {
+    console.error('Webhook Error:', err);
+    res.status(200).json({ error: err.message }); // Return 200 to avoid Telegram retries
   }
 };
