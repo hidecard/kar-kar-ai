@@ -98,15 +98,18 @@ bot.on('text', async (ctx) => {
 
 // Vercel Serverless Function Handler
 module.exports = async (req, res) => {
-  if (req.method === 'POST') {
-    try {
+  try {
+    if (req.method === 'POST') {
+      if (!req.body || !req.body.update_id) {
+        return res.status(200).send('No update received');
+      }
       await bot.handleUpdate(req.body);
-      res.status(200).json({ ok: true });
-    } catch (err) {
-      console.error('Error handling update:', err);
-      res.status(500).json({ error: err.message });
+      return res.status(200).json({ ok: true });
+    } else {
+      return res.status(200).send('Kar Kar AI Bot is running properly.');
     }
-  } else {
-    res.status(200).send('Bot is running properly with Webhook.');
+  } catch (error) {
+    console.error('Global Handler Error:', error);
+    return res.status(200).json({ error: error.message });
   }
 };
