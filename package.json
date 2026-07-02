@@ -1,16 +1,16 @@
 {
   "name": "kar-kar-ai",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "api/index.js",
   "scripts": {
+    "start": "node api/index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Telegram bot using Turso Knowledge Base",
   "dependencies": {
-    "@google/generative-ai": "^0.24.1",
     "@libsql/client": "^0.17.4",
     "dotenv": "^17.4.2",
     "telegraf": "^4.16.3"
