@@ -91,8 +91,15 @@ bot.on('text', async (ctx) => {
     return ctx.reply(aiAnswer);
 
   } catch (error) {
-    console.error("🤖 Bot Main Process Error:", error);
-    return ctx.reply('ဆောရီးဗျာ၊ Gemini AI ဘက်ကနေ အကြောင်းပြန်ဖို့ အခက်အခဲရှိနေပါတယ်။ Vercel မှာ Environment Variables တွေ မှန်မမှန် ပြန်စစ်ပေးပါ။');
+    console.error("🤖 Gemini/Bot Error:", error);
+    // Return detailed error message to help debug
+    let errorMsg = `Gemini AI Error: ${error.message}`;
+    if (error.message.includes('API_KEY_INVALID')) {
+        errorMsg = "အမှား: Gemini API Key မမှန်ကန်ပါ။ ကျေးဇူးပြု၍ API Key ကို ပြန်စစ်ပါ။";
+    } else if (error.message.includes('403')) {
+        errorMsg = "အမှား: Gemini API Access ငြင်းပယ်ခံရပါတယ်။ (403 Forbidden)";
+    }
+    return ctx.reply(`${errorMsg}\n\n(Debugging: Key length is ${GEMINI_KEY ? GEMINI_KEY.length : 0})`);
   }
 });
 
@@ -106,6 +113,6 @@ module.exports = async (req, res) => {
       res.status(200).json({ error: err.message });
     }
   } else {
-    res.status(200).send('Kar Kar AI Bot is active with Gemini.');
+    res.status(200).send('Kar Kar AI Bot is active.');
   }
 };
