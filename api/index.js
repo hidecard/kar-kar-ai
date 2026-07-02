@@ -1,6 +1,6 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@libsql/client');
-const { GoogleGenAI } = require('@google/genai');
+const { GoogleGenerativeAI } = require('@google/generative-ai'); // Correct library
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
@@ -8,7 +8,7 @@ const TURSO_URL = (process.env.TURSO_DATABASE_URL || "").replace('llibsql://', '
 const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 const bot = new Telegraf(BOT_TOKEN);
-const ai = new GoogleGenAI(GEMINI_KEY);
+const genAI = new GoogleGenerativeAI(GEMINI_KEY); // Correct initialization
 const db = createClient({
   url: TURSO_URL,
   authToken: TURSO_TOKEN,
@@ -70,18 +70,19 @@ bot.on('text', async (ctx) => {
     await saveToMemory(userId, 'user', userText);
     const memoryRows = await getChatMemory(userId);
 
-    const chatContents = memoryRows.map(row => ({
+    const history = memoryRows.map(row => ({
       role: row.role === 'user' ? 'user' : 'model',
       parts: [{ text: row.message }]
     }));
 
-    const model = ai.getGenerativeModel({
+    // Using correct Gemini 1.5 Flash model
+    const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction: "မင်းက ကူညီတတ်ပြီး ဉာဏ်ကောင်းတဲ့ AI Assistant တစ်ခုဖြစ်တယ်။ User နဲ့ အပြန်အလှန် ပြောဖူးသမျှ အချက်အလက်တွေကို မှတ်မိနေရမယ်။ အဖြေအားလုံးကို မြန်မာဘာသာစကားဖြင့်ပဲ ယဉ်ကျေးပျူငှာစွာ ဖြေကြားပေးပါ။"
     });
 
     const chat = model.startChat({
-      history: chatContents.slice(0, -1),
+      history: history.slice(0, -1),
     });
 
     const result = await chat.sendMessage(userText);
@@ -92,7 +93,7 @@ bot.on('text', async (ctx) => {
 
   } catch (error) {
     console.error("🤖 Bot Error:", error);
-    return ctx.reply(`Gemini Error: ${error.message}\n\n(Debugging: Key starts with ${GEMINI_KEY ? GEMINI_KEY.substring(0, 5) : 'NONE'})`);
+    return ctx.reply(`Gemini Error: ${error.message}`);
   }
 });
 
