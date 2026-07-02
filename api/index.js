@@ -1,6 +1,6 @@
 const { Telegraf } = require('telegraf');
 const { createClient } = require('@libsql/client');
-const { GoogleGenerativeAI } = require('@google/generative-ai'); // Correct library
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GEMINI_KEY = process.env.GEMINI_API_KEY;
@@ -8,7 +8,7 @@ const TURSO_URL = (process.env.TURSO_DATABASE_URL || "").replace('llibsql://', '
 const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 const bot = new Telegraf(BOT_TOKEN);
-const genAI = new GoogleGenerativeAI(GEMINI_KEY); // Correct initialization
+const genAI = new GoogleGenerativeAI(GEMINI_KEY);
 const db = createClient({
   url: TURSO_URL,
   authToken: TURSO_TOKEN,
@@ -26,6 +26,30 @@ async function initDb() {
           timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         );
       `);
+      
+      await db.execute(`
+        CREATE TABLE IF NOT EXISTS knowledge_base (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          keyword TEXT UNIQUE,
+          response TEXT
+        );
+      `);
+
+      // Initial JavaScript/Programming Data
+      const initialData = [
+        ['javascript', 'JavaScript သည် Web Development အတွက် အဓိကသုံးသော Programming Language တစ်ခုဖြစ်ပါသည်။'],
+        ['variable', 'JavaScript တွင် variable ကြေညာရန် let, const နှင့် var တို့ကို အသုံးပြုနိုင်ပါသည်။'],
+        ['function', 'Function ဆိုသည်မှာ သတ်မှတ်ထားသော အလုပ်တစ်ခုကို လုပ်ဆောင်ရန် စုစည်းထားသော code blocks များဖြစ်ပါသည်။'],
+        ['react', 'React သည် UI တည်ဆောက်ရန်အတွက် အသုံးပြုသော JavaScript Library တစ်ခုဖြစ်ပါသည်။'],
+        ['nodejs', 'Node.js သည် JavaScript ကို server-side တွင် run နိုင်အောင် ပြုလုပ်ပေးသော runtime တစ်ခုဖြစ်ပါသည်။']
+      ];
+
+      for (const [keyword, response] of initialData) {
+        await db.execute({
+          sql: 'INSERT OR IGNORE INTO knowledge_base (keyword, response) VALUES (?, ?)',
+          args: [keyword, response]
+        });
+      }
     }
   } catch (error) {
     console.error('❌ DB Init Error:', error);
@@ -33,6 +57,19 @@ async function initDb() {
 }
 
 initDb();
+
+async function findInKnowledgeBase(text) {
+  try {
+    const result = await db.execute({
+      sql: 'SELECT response FROM knowledge_base WHERE ? LIKE "%" || keyword || "%" LIMIT 1',
+      args: [text.toLowerCase()]
+    });
+    return result.rows.length > 0 ? result.rows[0].response : null;
+  } catch (error) {
+    console.error('❌ KB Search Error:', error);
+    return null;
+  }
+}
 
 async function saveToMemory(userId, role, message) {
   try {
@@ -59,7 +96,7 @@ async function getChatMemory(userId) {
 }
 
 bot.start((ctx) => {
-  return ctx.reply('မင်္ဂလာပါဗျာ။ Kar Kar AI Bot ပြန်လည်အလုပ်လုပ်ပါပြီ။ ကျွန်တော့်ကို စကားလုံးတွေ သင်ပေးပြီး စမ်းသပ်ကြည့်နိုင်ပါတယ်!');
+  return ctx.reply('မင်္ဂလာပါဗျာ။ Kar Kar AI Bot ပြန်လည်အလုပ်လုပ်ပါပြီ။ ကျွန်တော့်ကို JavaScript နဲ့ Programming အကြောင်းတွေ မေးမြန်းနိုင်ပါတယ်!');
 });
 
 bot.on('text', async (ctx) => {
@@ -68,14 +105,21 @@ bot.on('text', async (ctx) => {
 
   try {
     await saveToMemory(userId, 'user', userText);
-    const memoryRows = await getChatMemory(userId);
 
+    // 1. Check Knowledge Base first to save Gemini API Quota
+    const kbResponse = await findInKnowledgeBase(userText);
+    if (kbResponse) {
+      await saveToMemory(userId, 'model', kbResponse);
+      return ctx.reply(kbResponse + "\n\n(Retrieved from Local Knowledge Base)");
+    }
+
+    // 2. If not found, use Gemini API
+    const memoryRows = await getChatMemory(userId);
     const history = memoryRows.map(row => ({
       role: row.role === 'user' ? 'user' : 'model',
       parts: [{ text: row.message }]
     }));
 
-    // Using correct Gemini 1.5 Flash model
     const model = genAI.getGenerativeModel({
       model: 'gemini-1.5-flash-latest',
     });
@@ -92,7 +136,10 @@ bot.on('text', async (ctx) => {
 
   } catch (error) {
     console.error("🤖 Bot Error:", error);
-    return ctx.reply(`Gemini Error: ${error.message}`);
+    if (error.message.includes('429')) {
+      return ctx.reply("စိတ်မကောင်းပါဘူးဗျာ၊ လက်ရှိမှာ Gemini API Quota ပြည့်နေလို့ အဖြေမပေးနိုင်သေးပါဘူး။ ခဏနေမှ ပြန်စမ်းကြည့်ပေးပါ။");
+    }
+    return ctx.reply(`Error: ${error.message}`);
   }
 });
 
@@ -106,6 +153,6 @@ module.exports = async (req, res) => {
       res.status(200).json({ error: err.message });
     }
   } else {
-    res.status(200).send('Kar Kar AI Bot is active.');
+    res.status(200).send('Kar Kar AI Bot is active with Knowledge Base support.');
   }
 };
