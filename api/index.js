@@ -43,12 +43,13 @@ initDb();
 async function findInKnowledgeBase(text) {
   try {
     const lowerText = text.toLowerCase().trim();
-    // Fetch all keywords to check locally for better matching
     const result = await db.execute('SELECT keyword, response FROM knowledge_base');
     
-    for (const row of result.rows) {
+    // Sort keywords by length descending to match longest keyword first
+    const sortedRows = result.rows.sort((a, b) => b.keyword.length - a.keyword.length);
+
+    for (const row of sortedRows) {
       const keyword = row.keyword.toLowerCase().trim();
-      // If the message contains the keyword, return the response
       if (lowerText.includes(keyword)) {
         return row.response;
       }
@@ -57,6 +58,19 @@ async function findInKnowledgeBase(text) {
   } catch (error) {
     console.error('❌ KB Search Error:', error);
     return null;
+  }
+}
+
+async function teachBot(keyword, response) {
+  try {
+    await db.execute({
+      sql: 'INSERT OR REPLACE INTO knowledge_base (keyword, response) VALUES (?, ?)',
+      args: [keyword.toLowerCase().trim(), response.trim()]
+    });
+    return true;
+  } catch (error) {
+    console.error('❌ Teaching Error:', error);
+    return false;
   }
 }
 
@@ -72,7 +86,7 @@ async function saveToMemory(userId, role, message) {
 }
 
 bot.start((ctx) => {
-  return ctx.reply('မင်္ဂလာပါဗျာ။ Kar Kar AI Bot မှ ကြိုဆိုပါတယ်။ ကျွန်တော်သိတဲ့ JavaScript နဲ့ Programming အကြောင်းတွေကို မေးမြန်းနိုင်ပါတယ်!');
+  return ctx.reply('မင်္ဂလာပါဗျာ။ Kar Kar AI Bot မှ ကြိုဆိုပါတယ်။\n\nကျွန်တော့်ကို အချက်အလက်အသစ်တွေ သင်ပေးချင်ရင် "keyword: response" ပုံစံနဲ့ ရေးပေးပါဗျာ။\n\nဥပမာ - "python: Python သည် လွယ်ကူသော language ဖြစ်သည်။"');
 });
 
 bot.on('text', async (ctx) => {
@@ -80,7 +94,23 @@ bot.on('text', async (ctx) => {
   const userText = ctx.message.text;
 
   try {
-    // 1. Check Knowledge Base
+    // 1. Check if user is teaching the bot (format: keyword: response)
+    if (userText.includes(':')) {
+      const parts = userText.split(':');
+      if (parts.length >= 2) {
+        const keyword = parts[0].trim();
+        const response = parts.slice(1).join(':').trim();
+        
+        if (keyword && response) {
+          const success = await teachBot(keyword, response);
+          if (success) {
+            return ctx.reply(`မှတ်သားထားလိုက်ပါပြီခင်ဗျာ! အခုကစပြီး "${keyword}" လို့ မေးရင် အဖြေပေးနိုင်ပါပြီ။`);
+          }
+        }
+      }
+    }
+
+    // 2. Check Knowledge Base
     const kbResponse = await findInKnowledgeBase(userText);
     
     await saveToMemory(userId, 'user', userText);
@@ -89,7 +119,7 @@ bot.on('text', async (ctx) => {
       await saveToMemory(userId, 'bot', kbResponse);
       return ctx.reply(kbResponse);
     } else {
-      const fallbackMsg = "စိတ်မကောင်းပါဘူးဗျာ၊ အဲ့ဒီအကြောင်းအရာကို ကျွန်တော် မသိသေးပါဘူး။ နောက်မှ ထပ်မေးကြည့်ပေးပါဦး။";
+      const fallbackMsg = "စိတ်မကောင်းပါဘူးဗျာ၊ အဲ့ဒီအကြောင်းအရာကို ကျွန်တော် မသိသေးပါဘူး။ ကျွန်တော့်ကို သင်ပေးချင်ရင် \"keyword: response\" ပုံစံနဲ့ ရေးပေးပါဦး။";
       await saveToMemory(userId, 'bot', fallbackMsg);
       return ctx.reply(fallbackMsg);
     }
@@ -110,6 +140,6 @@ module.exports = async (req, res) => {
       res.status(200).json({ error: err.message });
     }
   } else {
-    res.status(200).send('Kar Kar AI Bot is active (Knowledge Base Only Mode).');
+    res.status(200).send('Kar Kar AI Bot is active with Teaching Mode.');
   }
 };
