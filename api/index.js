@@ -77,7 +77,7 @@ bot.on('text', async (ctx) => {
 
     // Using correct Gemini 1.5 Flash model
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash',
+      model: 'gemini-1.5-flash-latest',
     });
 
     const chat = model.startChat({
