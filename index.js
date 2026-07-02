@@ -3,21 +3,35 @@ const { Telegraf } = require('telegraf');
 const { createClient } = require('@libsql/client');
 const { GoogleGenAI } = require('@google/genai');
 
-// Package များကို စတင်သက်ဝင်စေခြင်း
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// Fix Database URL (removing the extra 'l')
 const dbUrl = process.env.TURSO_DATABASE_URL ? process.env.TURSO_DATABASE_URL.replace('llibsql://', 'libsql://') : '';
-
 const db = createClient({
   url: dbUrl,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
-/**
- * စကားပြောမှတ်တမ်းများကို Turso DB ထဲတွင် သိမ်းဆည်းပေးမည့် Function
- */
+// Table initialization
+async function initDb() {
+  try {
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS chat_memory (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        role TEXT,
+        message TEXT,
+        timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Database initialized');
+  } catch (error) {
+    console.error('❌ DB Init Error:', error);
+  }
+}
+
+initDb();
+
 async function saveToMemory(userId, role, message) {
   try {
     await db.execute({
@@ -29,9 +43,6 @@ async function saveToMemory(userId, role, message) {
   }
 }
 
-/**
- * User တစ်ဦးချင်းစီ၏ နောက်ဆုံးပြောခဲ့သော စကားပြောမှတ်တမ်း ၁၀ ကြောင်းကို ပြန်ယူပေးမည့် Function
- */
 async function getChatMemory(userId) {
   try {
     const result = await db.execute({
@@ -45,30 +56,25 @@ async function getChatMemory(userId) {
   }
 }
 
-// === Telegram Bot Events Handling ===
-
 bot.start((ctx) => {
+  console.log('Start command received');
   return ctx.reply('မင်္ဂလာပါဗျာ။ ကျွန်တော်က Turso Memory ပါဝင်တဲ့ Gemini AI Bot ဖြစ်ပါတယ်။ ကျွန်တော့်ကို စကားလုံးတွေ သင်ပေးပြီး စမ်းသပ်ကြည့်နိုင်ပါတယ်!');
 });
 
 bot.on('text', async (ctx) => {
   const userId = ctx.from.id.toString();
   const userText = ctx.message.text;
+  console.log(`Message from ${userId}: ${userText}`);
 
   try {
-    // ၁။ User ပြောလိုက်သော စာသားကို DB တွင် မှတ်ဉာဏ်အဖြစ် သိမ်းဆည်းသည်
     await saveToMemory(userId, 'user', userText);
-
-    // ၂။ ယခင် ပြောခဲ့ဖူးသမျှ သမိုင်းကြောင်း (Chat History) ကို DB မှ ဆွဲထုတ်သည်
     const memoryRows = await getChatMemory(userId);
 
-    // ၃။ Gemini SDK ဖတ်ရှုနိုင်မည့် Contents Object Format သို့ ပြောင်းလဲခြင်း
     const chatContents = memoryRows.map(row => ({
       role: row.role === 'user' ? 'user' : 'model',
       parts: [{ text: row.message }]
     }));
 
-    // ၄။ အတိတ်မှတ်တမ်းများအပါအဝင် Gemini API ထံ ပေးပို့၍ အဖြေတောင်းခံခြင်း
     const model = ai.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction: "မင်းက ကူညီတတ်ပြီး ဉာဏ်ကောင်းတဲ့ AI Assistant တစ်ခုဖြစ်တယ်။ User နဲ့ အပြန်အလှန် ပြောဖူးသမျှ အချက်အလက်တွေကို မှတ်မိနေရမယ်။ အဖြေအားလုံးကို မြန်မာဘာသာစကားဖြင့်ပဲ ယဉ်ကျေးပျူငှာစွာ ဖြေကြားပေးပါ။"
@@ -81,10 +87,7 @@ bot.on('text', async (ctx) => {
     const result = await chat.sendMessage(userText);
     const aiAnswer = result.response.text();
 
-    // ၅။ Gemini ၏ အဖြေကို နောက်တစ်ကြိမ် မမေ့စေရန် DB တွင် ထပ်မံသိမ်းဆည်းသည်
     await saveToMemory(userId, 'model', aiAnswer);
-
-    // ၆။ Telegram အသုံးပြုသူထံ အဖြေစာသား ပြန်လည်ပေးပို့သည်
     return ctx.reply(aiAnswer);
 
   } catch (error) {
@@ -93,5 +96,17 @@ bot.on('text', async (ctx) => {
   }
 });
 
-// Vercel Serverless Function Handler using Telegraf's built-in webhookCallback
-module.exports = bot.webhookCallback('/');
+// Vercel Serverless Function Handler
+module.exports = async (req, res) => {
+  if (req.method === 'POST') {
+    try {
+      await bot.handleUpdate(req.body);
+      res.status(200).json({ ok: true });
+    } catch (err) {
+      console.error('Error handling update:', err);
+      res.status(500).json({ error: err.message });
+    }
+  } else {
+    res.status(200).send('Bot is running properly with Webhook.');
+  }
+};
